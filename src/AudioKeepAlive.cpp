@@ -118,11 +118,15 @@ namespace
 
 }
 
-extern "C" __declspec(dllexport) void CALLBACK RunKeepAlive(HWND, HINSTANCE, LPSTR, int)
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+
     MMRESULT result = PlayPulse();
     if (result != MMSYSERR_NOERROR)
     {
         WriteLastErrorCode(result);
     }
+
+    return static_cast<int>(result);
 }

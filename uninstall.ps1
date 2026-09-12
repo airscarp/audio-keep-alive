@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 
 $taskName = 'Audio Keep Alive'
 $installDirectory = Join-Path $env:LOCALAPPDATA 'AudioKeepAlive'
-$obsoleteExecutable = Join-Path $installDirectory 'AudioKeepAlive.exe'
+$installedExecutable = Join-Path $installDirectory 'AudioKeepAlive.exe'
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 
 if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
@@ -14,7 +14,7 @@ if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
 }
 
 Get-Process -Name 'AudioKeepAlive' -ErrorAction SilentlyContinue |
-    Where-Object { $_.Path -eq $obsoleteExecutable } |
+    Where-Object { $_.Path -eq $installedExecutable } |
     Stop-Process -Force
 Remove-ItemProperty -Path $runKey -Name 'AudioKeepAlive' -ErrorAction SilentlyContinue
 

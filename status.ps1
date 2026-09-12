@@ -3,7 +3,8 @@ param()
 
 $taskName = 'Audio Keep Alive'
 $installDirectory = Join-Path $env:LOCALAPPDATA 'AudioKeepAlive'
-$installedDll = Join-Path $installDirectory 'AudioKeepAlive.dll'
+$installedExecutable = Join-Path $installDirectory 'AudioKeepAlive.exe'
+$installedLauncher = Join-Path $installDirectory 'RunHidden.vbs'
 $errorFile = Join-Path $installDirectory 'last-error.txt'
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 
@@ -14,8 +15,8 @@ $trigger = if ($task) { $task.Triggers | Select-Object -First 1 } else { $null }
 $legacyRunEntry = Get-ItemPropertyValue -Path $runKey -Name 'AudioKeepAlive' -ErrorAction SilentlyContinue
 
 [pscustomobject]@{
-    Installed      = Test-Path -LiteralPath $installedDll
-    InstalledDll   = $installedDll
+    Installed          = (Test-Path -LiteralPath $installedExecutable) -and (Test-Path -LiteralPath $installedLauncher)
+    InstalledExecutable = $installedExecutable
     TaskRegistered = $null -ne $task
     TaskState      = if ($task) { $task.State } else { 'Not installed' }
     TaskEnabled    = if ($task) { $task.Settings.Enabled } else { $false }

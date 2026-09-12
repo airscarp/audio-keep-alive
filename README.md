@@ -16,9 +16,9 @@ Windows Task Scheduler launches a short-lived native audio pulse at a fixed inte
 
 ## How it works
 
-The scheduled task runs the Windows GUI host `rundll32.exe` every two minutes. It loads `AudioKeepAlive.dll`, calls the exported `RunKeepAlive` function, and plays approximately one second of digital silence through the default output device.
+The scheduled task runs the Windows Script Host in batch mode every two minutes. A tiny launcher starts `AudioKeepAlive.exe` with its window hidden and waits for it to play approximately one second of near-silent audio through the default output device.
 
-Each invocation then exits. If audio playback hangs, the DLL cancels it after three seconds. Task Scheduler also enforces a one-minute execution limit, retries failures up to three times, and starts missed runs when possible.
+Each invocation then exits. If audio playback hangs, the program cancels it after three seconds. Task Scheduler also enforces a one-minute execution limit, retries failures up to three times, and starts missed runs when possible.
 
 Because every interval starts a new process, one failed invocation cannot permanently stop later pulses.
 
@@ -28,7 +28,7 @@ Because every interval starts a new process, one failed invocation cannot perman
 - PowerShell 5.1 or later
 - Visual Studio Build Tools with the C++ toolchain only when building from source
 
-The checked-in release DLL lets normal users install without a compiler.
+The checked-in release executable lets normal users install without a compiler.
 
 ## Install
 
@@ -41,7 +41,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 The installer:
 
-1. Copies `dist\AudioKeepAlive.dll` to `%LOCALAPPDATA%\AudioKeepAlive`.
+1. Copies `dist\AudioKeepAlive.exe` and the hidden launcher to `%LOCALAPPDATA%\AudioKeepAlive`.
 2. Registers the hidden `Audio Keep Alive` scheduled task.
 3. Configures a pulse every two minutes.
 4. Removes the obsolete persistent-process installation.
@@ -86,7 +86,7 @@ This removes the scheduled task, installed files, and any legacy startup entry.
 Output:
 
 ```text
-dist\AudioKeepAlive.dll
+dist\AudioKeepAlive.exe
 ```
 
 Or rebuild during installation:
@@ -105,7 +105,7 @@ The project is intentionally small and auditable. It:
 - makes no network requests;
 - collects no data.
 
-The task action uses the Windows system binary `%WINDIR%\System32\rundll32.exe` and the locally installed project DLL.
+The task action uses `%WINDIR%\System32\wscript.exe` with batch mode enabled, so script errors and prompts are suppressed. The native executable also disables Windows critical-error and crash dialog boxes.
 
 ## Limitations
 

@@ -9,21 +9,22 @@ $ErrorActionPreference = 'Stop'
 
 $taskName = 'Audio Keep Alive'
 $installDirectory = Join-Path $env:LOCALAPPDATA 'AudioKeepAlive'
-$sourceDll = Join-Path $PSScriptRoot 'dist\AudioKeepAlive.dll'
-$installedDll = Join-Path $installDirectory 'AudioKeepAlive.dll'
-$obsoleteExecutable = Join-Path $installDirectory 'AudioKeepAlive.exe'
+$sourceExecutable = Join-Path $PSScriptRoot 'dist\AudioKeepAlive.exe'
+$sourceLauncher = Join-Path $PSScriptRoot 'RunHidden.vbs'
+$installedExecutable = Join-Path $installDirectory 'AudioKeepAlive.exe'
+$installedLauncher = Join-Path $installDirectory 'RunHidden.vbs'
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $runValueName = 'AudioKeepAlive'
 
-if ($Build -or -not (Test-Path -LiteralPath $sourceDll)) {
+if ($Build -or -not (Test-Path -LiteralPath $sourceExecutable)) {
     & (Join-Path $PSScriptRoot 'build.ps1')
 }
-if (-not (Test-Path -LiteralPath $sourceDll)) {
-    throw "Build output not found: $sourceDll"
+if (-not (Test-Path -LiteralPath $sourceExecutable)) {
+    throw "Build output not found: $sourceExecutable"
 }
 
 Get-Process -Name 'AudioKeepAlive' -ErrorAction SilentlyContinue |
-    Where-Object { $_.Path -eq $obsoleteExecutable } |
+    Where-Object { $_.Path -eq $installedExecutable } |
     Stop-Process -Force
 Remove-ItemProperty -Path $runKey -Name $runValueName -ErrorAction SilentlyContinue
 
@@ -33,16 +34,16 @@ if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
 }
 
 New-Item -ItemType Directory -Path $installDirectory -Force | Out-Null
-Copy-Item -LiteralPath $sourceDll -Destination $installedDll -Force
-Remove-Item -LiteralPath $obsoleteExecutable -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath (Join-Path $installDirectory 'RunHidden.vbs') -Force -ErrorAction SilentlyContinue
+Copy-Item -LiteralPath $sourceExecutable -Destination $installedExecutable -Force
+Copy-Item -LiteralPath $sourceLauncher -Destination $installedLauncher -Force
+Remove-Item -LiteralPath (Join-Path $installDirectory 'AudioKeepAlive.dll') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $installDirectory 'AudioKeepAlive.cs') -Force -ErrorAction SilentlyContinue
 
-$rundll32 = Join-Path $env:WINDIR 'System32\rundll32.exe'
-$taskArguments = '"{0}",RunKeepAlive' -f $installedDll
+$wscript = Join-Path $env:WINDIR 'System32\wscript.exe'
+$taskArguments = '//B //NoLogo "{0}"' -f $installedLauncher
 $startBoundary = (Get-Date).AddSeconds(10).ToString("yyyy-MM-dd'T'HH:mm:sszzz")
 $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-$escapedCommand = [Security.SecurityElement]::Escape($rundll32)
+$escapedCommand = [Security.SecurityElement]::Escape($wscript)
 $escapedArguments = [Security.SecurityElement]::Escape($taskArguments)
 
 $taskXml = @"
@@ -99,5 +100,5 @@ $taskXml = @"
 Register-ScheduledTask -TaskName $taskName -Xml $taskXml -Force | Out-Null
 Start-ScheduledTask -TaskName $taskName
 
-Write-Host "Installed: $installedDll"
+Write-Host "Installed: $installedExecutable"
 Write-Host "Scheduled task: $taskName (every $IntervalMinutes minute(s))"
