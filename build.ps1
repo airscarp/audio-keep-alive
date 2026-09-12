@@ -3,24 +3,53 @@ param()
 
 $ErrorActionPreference = 'Stop'
 
-$source = Join-Path $PSScriptRoot 'src\AudioKeepAlive.cs'
-$outputDirectory = Join-Path $PSScriptRoot 'bin'
+$source = Join-Path $PSScriptRoot 'src\AudioKeepAlive.cpp'
+$buildDirectory = Join-Path $PSScriptRoot 'build'
+$outputDirectory = Join-Path $PSScriptRoot 'dist'
 $output = Join-Path $outputDirectory 'AudioKeepAlive.exe'
-$compilerCandidates = @(
-    (Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'),
-    (Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe')
-)
-$compiler = $compilerCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 
-if (-not $compiler) {
-    throw 'The Windows .NET Framework C# compiler was not found.'
+if (-not (Test-Path -LiteralPath $vswhere)) {
+    throw 'Visual Studio Installer (vswhere.exe) was not found.'
 }
 
+$installationPath = & $vswhere `
+    -latest `
+    -products '*' `
+    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+    -property installationPath
+if (-not $installationPath) {
+    throw 'Visual Studio C++ Build Tools were not found.'
+}
+
+$vcvars = Join-Path $installationPath 'VC\Auxiliary\Build\vcvars64.bat'
+if (-not (Test-Path -LiteralPath $vcvars)) {
+    throw "Compiler environment script not found: $vcvars"
+}
+
+New-Item -ItemType Directory -Path $buildDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 
-& $compiler /nologo /target:winexe /optimize+ "/out:$output" $source
-if ($LASTEXITCODE -ne 0) {
-    throw "Compilation failed with exit code $LASTEXITCODE."
+$batchFile = Join-Path $env:TEMP ("AudioKeepAlive-build-{0}.cmd" -f [guid]::NewGuid())
+$batch = @"
+@echo off
+call "$vcvars" >nul
+pushd "$buildDirectory"
+cl /nologo /O2 /GL /MT /DUNICODE /D_UNICODE /EHsc /W4 /Fe:"$output" "$source" /link /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /LTCG /INCREMENTAL:NO
+set BUILD_EXIT=%ERRORLEVEL%
+popd
+exit /b %BUILD_EXIT%
+"@
+
+try {
+    Set-Content -LiteralPath $batchFile -Value $batch -Encoding Ascii
+    & $env:ComSpec /d /c $batchFile
+    if ($LASTEXITCODE -ne 0) {
+        throw "Compilation failed with exit code $LASTEXITCODE."
+    }
+}
+finally {
+    Remove-Item -LiteralPath $batchFile -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host "Built: $output"

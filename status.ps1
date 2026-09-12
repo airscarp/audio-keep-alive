@@ -2,17 +2,22 @@
 param()
 
 $ErrorActionPreference = 'Stop'
-$taskName = 'Audio Keep Alive'
+$installedExecutable = Join-Path $env:LOCALAPPDATA 'AudioKeepAlive\AudioKeepAlive.exe'
+$runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+$runValueName = 'AudioKeepAlive'
+$errorFile = Join-Path $env:LOCALAPPDATA 'AudioKeepAlive\last-error.txt'
 
-$task = Get-ScheduledTask -TaskName $taskName
-$info = Get-ScheduledTaskInfo -TaskName $taskName
+$process = Get-Process -Name 'AudioKeepAlive' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -eq $installedExecutable } |
+    Select-Object -First 1
+$runCommand = Get-ItemPropertyValue -Path $runKey -Name $runValueName -ErrorAction SilentlyContinue
 
 [pscustomobject]@{
-    TaskName = $taskName
-    Enabled = $task.Settings.Enabled
-    State = $task.State
-    LastRunTime = $info.LastRunTime
-    LastTaskResult = $info.LastTaskResult
-    NextRunTime = $info.NextRunTime
-    Interval = $task.Triggers[0].Repetition.Interval
+    Installed = Test-Path -LiteralPath $installedExecutable
+    AutoStartRegistered = [bool]$runCommand
+    Running = [bool]$process
+    ProcessId = if ($process) { $process.Id } else { $null }
+    WorkingSetMB = if ($process) { [math]::Round($process.WorkingSet64 / 1MB, 2) } else { $null }
+    AutoStartCommand = $runCommand
+    LastErrorFile = if (Test-Path -LiteralPath $errorFile) { $errorFile } else { $null }
 } | Format-List
