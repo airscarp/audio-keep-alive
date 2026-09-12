@@ -1,73 +1,73 @@
 # Audio Keep Alive
 
-Audio Keep Alive is a lightweight, open-source Windows utility that prevents Bluetooth speakers, headphones, soundbars, USB DACs, and audio interfaces from sleeping or entering automatic standby during quiet periods.
+A tiny, open-source Windows utility that helps prevent Bluetooth speakers, soundbars, headphones, and other audio devices from entering standby.
 
-It runs as an invisible, low-resource process and plays a one-second, near-silent PCM pulse at a regular interval. Between pulses it sleeps without consuming CPU time.
+Windows Task Scheduler launches a short-lived native audio pulse at a fixed interval. No Audio Keep Alive process remains running between pulses.
 
 ## Features
 
-- Keeps the Windows Bluetooth audio stream active during silence.
-- Prevents supported speakers, headphones, and soundbars from auto-sleeping.
-- Runs invisibly with no terminal window, tray icon, service, or driver.
-- Starts automatically when the Windows user signs in.
-- Uses approximately 2 MB of private memory and no measurable CPU while idle.
-- Works entirely offline with no telemetry or network access.
+- Invisible: no terminal or application window
+- Minimal overhead: zero persistent CPU or memory use
+- Resilient: every pulse is a fresh process
+- Self-recovering: Task Scheduler retries failures and continues future runs
+- Device-independent: uses the current Windows default audio output
+- Offline and dependency-free after installation
+- No telemetry, network access, services, or administrator rights
 
-## Why this approach?
+## How it works
 
-Some devices treat digital silence as inactivity. Audio Keep Alive generates a real but extremely low-level signal (approximately `-81 dBFS`) so the Windows audio path remains active without producing noticeable sound under normal listening conditions.
+The scheduled task runs the Windows GUI host `rundll32.exe` every two minutes. It loads `AudioKeepAlive.dll`, calls the exported `RunKeepAlive` function, and plays approximately one second of digital silence through the default output device.
 
-The utility:
+Each invocation then exits. If audio playback hangs, the DLL cancels it after three seconds. Task Scheduler also enforces a one-minute execution limit, retries failures up to three times, and starts missed runs when possible.
 
-- uses no network connection;
-- collects no telemetry;
-- installs no service, scheduled task, or driver;
-- uses only Windows components;
-- never opens a terminal window;
-- starts automatically when the user signs in;
-- catches playback failures and retries on the next interval.
-
-The executable is a native x64 Win32 application. It does not load .NET, Electron, or another application runtime.
+Because every interval starts a new process, one failed invocation cannot permanently stop later pulses.
 
 ## Requirements
 
 - Windows 10 or Windows 11
-- Windows PowerShell 5.1
-- An x64 processor
+- PowerShell 5.1 or later
+- Visual Studio Build Tools with the C++ toolchain only when building from source
 
-No administrator privileges or third-party packages are required.
+The checked-in release DLL lets normal users install without a compiler.
 
 ## Install
 
-Open Windows PowerShell in the repository directory and run:
+Open PowerShell in the repository directory:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 .\install.ps1
 ```
 
-The default pulse interval is two minutes. To use another interval:
+The installer:
+
+1. Copies `dist\AudioKeepAlive.dll` to `%LOCALAPPDATA%\AudioKeepAlive`.
+2. Registers the hidden `Audio Keep Alive` scheduled task.
+3. Configures a pulse every two minutes.
+4. Removes the obsolete persistent-process installation.
+5. Starts one immediate verification pulse.
+
+Choose another interval:
 
 ```powershell
 .\install.ps1 -IntervalMinutes 5
 ```
 
-Installation performs these steps:
-
-1. Uses the prebuilt native executable included in `dist`.
-2. Copies the executable to `%LOCALAPPDATA%\AudioKeepAlive`.
-3. Adds a per-user startup entry under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
-4. Starts the invisible process immediately.
-
-Windows starts the process again whenever the user signs in. A named mutex prevents duplicate instances.
-
-## Check status
+## Status
 
 ```powershell
-.\status.ps1
+.\status.ps1 | Format-List
 ```
 
-The status output reports installation, automatic startup, process state, process ID, and working-set memory. If playback fails, the executable stores the most recent exception in `%LOCALAPPDATA%\AudioKeepAlive\last-error.txt`. Successful pulses do not write to disk.
+Expected healthy state:
+
+- `Installed: True`
+- `TaskRegistered: True`
+- `TaskState: Ready` between pulses
+- `LastTaskResult: 0` after a successful pulse
+- `LegacyRunEntry:` empty
+
+No persistent Audio Keep Alive process is expected.
 
 ## Uninstall
 
@@ -75,59 +75,45 @@ The status output reports installation, automatic startup, process state, proces
 .\uninstall.ps1
 ```
 
-This removes the scheduled task and the installed executable. The repository remains untouched.
+This removes the scheduled task, installed files, and any legacy startup entry.
 
-## Build only
-
-Building requires Visual Studio 2022 Build Tools with the **Desktop development with C++** workload:
+## Build from source
 
 ```powershell
 .\build.ps1
 ```
 
-The output is written to `dist\AudioKeepAlive.exe`. To rebuild during installation:
+Output:
+
+```text
+dist\AudioKeepAlive.dll
+```
+
+Or rebuild during installation:
 
 ```powershell
 .\install.ps1 -Build
 ```
 
-The repository includes the prebuilt x64 executable so target computers do not need a compiler. The binary is reproducible from `src\AudioKeepAlive.cpp`.
+## Security and privacy
 
-## How it works
+The project is intentionally small and auditable. It:
 
-The executable builds a mono, 16-bit, 44.1 kHz PCM stream in memory. The stream contains a one-second 440 Hz sine wave at an amplitude of 3 out of 32,767, with a ten-millisecond fade at both ends to prevent clicks. The native Windows `waveOut` API sends it to the current default audio output.
+- generates silence in memory;
+- writes only installation files and `last-error.txt` when playback fails;
+- registers one per-user scheduled task;
+- makes no network requests;
+- collects no data.
 
-The executable is compiled as a Windows GUI application, so it never allocates a console window. In continuous mode it sleeps between pulses, handles audio failures, and continues retrying. The single process remains in memory to avoid repeated process launches and terminal flashes.
-
-On the development machine, the native process used approximately 1.9 MB of private memory, an 11.8 MB working set including shared Windows libraries, and no measurable CPU time during a three-second idle sample. Actual figures vary by Windows version.
-
-## Troubleshooting
-
-### The Bluetooth speaker still goes to sleep
-
-Install again with a shorter interval:
-
-```powershell
-.\install.ps1 -IntervalMinutes 1
-```
-
-Also confirm that the speaker is the current default Windows audio output.
-
-### Windows SmartScreen warns about the executable
-
-The included executable is not code-signed, so SmartScreen may show a reputation warning. You can inspect `src\AudioKeepAlive.cpp` and build the executable locally with `.\build.ps1` before installation.
-
-### The device disconnected
-
-Audio Keep Alive prevents idle standby by keeping an existing audio stream active. It does not pair, connect, or reconnect Bluetooth devices.
+The task action uses the Windows system binary `%WINDIR%\System32\rundll32.exe` and the locally installed project DLL.
 
 ## Limitations
 
-- Audio is sent to the current default Windows output, not a device selected by name.
-- A device must already be connected; this utility does not pair or reconnect Bluetooth devices.
-- Some hardware may ignore a signal this quiet. Reduce the interval first if the device still sleeps.
-- Keeping a battery-powered speaker awake will increase its battery consumption.
+- Windows sends the pulse to the current default audio output.
+- Some devices detect true digital silence and may still enter standby.
+- The task runs only while the installing user has an interactive session, because Windows audio is session-scoped.
+- This keeps an already connected audio path active; it does not reconnect a powered-off Bluetooth device.
 
 ## License
 
-Licensed under the MIT License. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

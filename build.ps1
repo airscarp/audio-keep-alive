@@ -6,7 +6,8 @@ $ErrorActionPreference = 'Stop'
 $source = Join-Path $PSScriptRoot 'src\AudioKeepAlive.cpp'
 $buildDirectory = Join-Path $PSScriptRoot 'build'
 $outputDirectory = Join-Path $PSScriptRoot 'dist'
-$output = Join-Path $outputDirectory 'AudioKeepAlive.exe'
+$dllOutput = Join-Path $outputDirectory 'AudioKeepAlive.dll'
+$importLibrary = Join-Path $buildDirectory 'AudioKeepAlive.lib'
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 
 if (-not (Test-Path -LiteralPath $vswhere)) {
@@ -35,7 +36,7 @@ $batch = @"
 @echo off
 call "$vcvars" >nul
 pushd "$buildDirectory"
-cl /nologo /O2 /GL /MT /DUNICODE /D_UNICODE /EHsc /W4 /Fe:"$output" "$source" /link /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /LTCG /INCREMENTAL:NO
+cl /nologo /O2 /GL /MT /DUNICODE /D_UNICODE /EHsc /W4 /LD /Fe:"$dllOutput" "$source" /link /OPT:REF /OPT:ICF /LTCG /INCREMENTAL:NO /IMPLIB:"$importLibrary"
 set BUILD_EXIT=%ERRORLEVEL%
 popd
 exit /b %BUILD_EXIT%
@@ -52,4 +53,8 @@ finally {
     Remove-Item -LiteralPath $batchFile -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host "Built: $output"
+Remove-Item -LiteralPath (Join-Path $outputDirectory 'AudioKeepAlive.exe') -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path $outputDirectory 'AudioKeepAlive.lib') -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path $outputDirectory 'AudioKeepAlive.exp') -Force -ErrorAction SilentlyContinue
+
+Write-Host "Built: $dllOutput"

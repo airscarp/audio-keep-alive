@@ -1,17 +1,15 @@
 #include <windows.h>
 #include <mmsystem.h>
-#include <shellapi.h>
 #include <math.h>
-#include <wchar.h>
 
 #pragma comment(lib, "winmm.lib")
-#pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "user32.lib")
 
 namespace
 {
     const int SampleRate = 44100;
     const int DurationMilliseconds = 1000;
+    const DWORD PlaybackTimeoutMilliseconds = 3000;
     const double Frequency = 440.0;
     const short Amplitude = 3;
     const double Pi = 3.14159265358979323846;
@@ -96,8 +94,16 @@ namespace
             result = waveOutWrite(output, &header, sizeof(header));
             if (result == MMSYSERR_NOERROR)
             {
+                DWORD startedAt = GetTickCount();
                 while ((header.dwFlags & WHDR_DONE) == 0)
                 {
+                    if (GetTickCount() - startedAt >= PlaybackTimeoutMilliseconds)
+                    {
+                        waveOutReset(output);
+                        result = MMSYSERR_ERROR;
+                        break;
+                    }
+
                     Sleep(10);
                 }
             }
@@ -110,86 +116,13 @@ namespace
         return result;
     }
 
-    bool ParseArguments(int& intervalMinutes)
-    {
-        intervalMinutes = 2;
-        bool continuous = false;
-        int argumentCount = 0;
-        LPWSTR* arguments = CommandLineToArgvW(GetCommandLineW(), &argumentCount);
-        if (arguments == nullptr)
-        {
-            return false;
-        }
-
-        for (int i = 1; i < argumentCount; ++i)
-        {
-            if (_wcsicmp(arguments[i], L"--continuous") == 0)
-            {
-                continuous = true;
-            }
-            else if (_wcsicmp(arguments[i], L"--interval-minutes") == 0)
-            {
-                if (++i >= argumentCount)
-                {
-                    continuous = false;
-                    break;
-                }
-
-                wchar_t* end = nullptr;
-                long parsed = wcstol(arguments[i], &end, 10);
-                if (end == arguments[i] || *end != L'\0' || parsed < 1 || parsed > 60)
-                {
-                    continuous = false;
-                    break;
-                }
-
-                intervalMinutes = static_cast<int>(parsed);
-            }
-        }
-
-        LocalFree(arguments);
-        return continuous;
-    }
 }
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
+extern "C" __declspec(dllexport) void CALLBACK RunKeepAlive(HWND, HINSTANCE, LPSTR, int)
 {
-    int intervalMinutes = 2;
-    bool continuous = ParseArguments(intervalMinutes);
-
-    if (!continuous)
+    MMRESULT result = PlayPulse();
+    if (result != MMSYSERR_NOERROR)
     {
-        MMRESULT result = PlayPulse();
-        if (result != MMSYSERR_NOERROR)
-        {
-            WriteLastErrorCode(result);
-            return 1;
-        }
-
-        return 0;
-    }
-
-    HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\AudioKeepAlive");
-    if (mutex == nullptr)
-    {
-        return 1;
-    }
-
-    if (GetLastError() == ERROR_ALREADY_EXISTS)
-    {
-        CloseHandle(mutex);
-        return 0;
-    }
-
-    const DWORD intervalMilliseconds = static_cast<DWORD>(intervalMinutes) * 60U * 1000U;
-    while (true)
-    {
-        MMRESULT result = PlayPulse();
-        if (result != MMSYSERR_NOERROR)
-        {
-            WriteLastErrorCode(result);
-        }
-
-        Sleep(intervalMilliseconds);
+        WriteLastErrorCode(result);
     }
 }

@@ -1,23 +1,29 @@
 [CmdletBinding()]
 param()
 
-$ErrorActionPreference = 'Stop'
-$installedExecutable = Join-Path $env:LOCALAPPDATA 'AudioKeepAlive\AudioKeepAlive.exe'
+$taskName = 'Audio Keep Alive'
+$installDirectory = Join-Path $env:LOCALAPPDATA 'AudioKeepAlive'
+$installedDll = Join-Path $installDirectory 'AudioKeepAlive.dll'
+$errorFile = Join-Path $installDirectory 'last-error.txt'
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-$runValueName = 'AudioKeepAlive'
-$errorFile = Join-Path $env:LOCALAPPDATA 'AudioKeepAlive\last-error.txt'
 
-$process = Get-Process -Name 'AudioKeepAlive' -ErrorAction SilentlyContinue |
-    Where-Object { $_.Path -eq $installedExecutable } |
-    Select-Object -First 1
-$runCommand = Get-ItemPropertyValue -Path $runKey -Name $runValueName -ErrorAction SilentlyContinue
+$task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+$taskInfo = if ($task) { Get-ScheduledTaskInfo -TaskName $taskName } else { $null }
+$action = if ($task) { $task.Actions | Select-Object -First 1 } else { $null }
+$trigger = if ($task) { $task.Triggers | Select-Object -First 1 } else { $null }
+$legacyRunEntry = Get-ItemPropertyValue -Path $runKey -Name 'AudioKeepAlive' -ErrorAction SilentlyContinue
 
 [pscustomobject]@{
-    Installed = Test-Path -LiteralPath $installedExecutable
-    AutoStartRegistered = [bool]$runCommand
-    Running = [bool]$process
-    ProcessId = if ($process) { $process.Id } else { $null }
-    WorkingSetMB = if ($process) { [math]::Round($process.WorkingSet64 / 1MB, 2) } else { $null }
-    AutoStartCommand = $runCommand
-    LastErrorFile = if (Test-Path -LiteralPath $errorFile) { $errorFile } else { $null }
-} | Format-List
+    Installed      = Test-Path -LiteralPath $installedDll
+    InstalledDll   = $installedDll
+    TaskRegistered = $null -ne $task
+    TaskState      = if ($task) { $task.State } else { 'Not installed' }
+    TaskEnabled    = if ($task) { $task.Settings.Enabled } else { $false }
+    RepeatInterval = if ($trigger) { $trigger.Repetition.Interval } else { $null }
+    LastRunTime    = if ($taskInfo) { $taskInfo.LastRunTime } else { $null }
+    LastTaskResult = if ($taskInfo) { $taskInfo.LastTaskResult } else { $null }
+    NextRunTime    = if ($taskInfo) { $taskInfo.NextRunTime } else { $null }
+    Action         = if ($action) { "$($action.Execute) $($action.Arguments)" } else { $null }
+    LegacyRunEntry = $legacyRunEntry
+    LastError      = if (Test-Path -LiteralPath $errorFile) { Get-Content -LiteralPath $errorFile -Raw } else { $null }
+}
