@@ -42,7 +42,7 @@ Start-Process -FilePath $installedExecutable -ArgumentList @(
     '--continuous',
     '--interval-minutes',
     $IntervalMinutes
-)
+) -WorkingDirectory $installDirectory
 
 Write-Host 'Installed invisible background process with per-user automatic startup.'
 Write-Host "Pulse interval: $IntervalMinutes minute(s)"
