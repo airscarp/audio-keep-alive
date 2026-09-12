@@ -1,8 +1,17 @@
 # Audio Keep Alive
 
-Audio Keep Alive is a tiny, open-source Windows utility that prevents Bluetooth speakers, soundbars, USB DACs, and other audio devices from entering standby during quiet periods.
+Audio Keep Alive is a lightweight, open-source Windows utility that prevents Bluetooth speakers, headphones, soundbars, USB DACs, and audio interfaces from sleeping or entering automatic standby during quiet periods.
 
 It runs as an invisible, low-resource process and plays a one-second, near-silent PCM pulse at a regular interval. Between pulses it sleeps without consuming CPU time.
+
+## Features
+
+- Keeps the Windows Bluetooth audio stream active during silence.
+- Prevents supported speakers, headphones, and soundbars from auto-sleeping.
+- Runs invisibly with no terminal window, tray icon, service, or driver.
+- Starts automatically when the Windows user signs in.
+- Uses approximately 2 MB of private memory and no measurable CPU while idle.
+- Works entirely offline with no telemetry or network access.
 
 ## Why this approach?
 
@@ -91,6 +100,26 @@ The executable builds a mono, 16-bit, 44.1 kHz PCM stream in memory. The stream 
 The executable is compiled as a Windows GUI application, so it never allocates a console window. In continuous mode it sleeps between pulses, handles audio failures, and continues retrying. The single process remains in memory to avoid repeated process launches and terminal flashes.
 
 On the development machine, the native process used approximately 1.9 MB of private memory, an 11.8 MB working set including shared Windows libraries, and no measurable CPU time during a three-second idle sample. Actual figures vary by Windows version.
+
+## Troubleshooting
+
+### The Bluetooth speaker still goes to sleep
+
+Install again with a shorter interval:
+
+```powershell
+.\install.ps1 -IntervalMinutes 1
+```
+
+Also confirm that the speaker is the current default Windows audio output.
+
+### Windows SmartScreen warns about the executable
+
+The included executable is not code-signed, so SmartScreen may show a reputation warning. You can inspect `src\AudioKeepAlive.cpp` and build the executable locally with `.\build.ps1` before installation.
+
+### The device disconnected
+
+Audio Keep Alive prevents idle standby by keeping an existing audio stream active. It does not pair, connect, or reconnect Bluetooth devices.
 
 ## Limitations
 
