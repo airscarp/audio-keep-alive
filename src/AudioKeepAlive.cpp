@@ -11,7 +11,7 @@ namespace
     const int DurationMilliseconds = 1000;
     const DWORD PlaybackTimeoutMilliseconds = 3000;
     const double Frequency = 440.0;
-    const short Amplitude = 3;
+    const short Amplitude = 128;
     const double Pi = 3.14159265358979323846;
 
     void WriteLastErrorCode(MMRESULT result)

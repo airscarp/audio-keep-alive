@@ -8,11 +8,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $taskName = 'Audio Keep Alive'
-$installDirectory = Join-Path $env:LOCALAPPDATA 'AudioKeepAlive'
+$installDirectory = Join-Path $env:ProgramData 'AudioKeepAlive'
+$legacyInstallDirectory = Join-Path $env:LOCALAPPDATA 'AudioKeepAlive'
 $sourceExecutable = Join-Path $PSScriptRoot 'dist\AudioKeepAlive.exe'
-$sourceLauncher = Join-Path $PSScriptRoot 'RunHidden.vbs'
 $installedExecutable = Join-Path $installDirectory 'AudioKeepAlive.exe'
-$installedLauncher = Join-Path $installDirectory 'RunHidden.vbs'
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $runValueName = 'AudioKeepAlive'
 
@@ -24,7 +23,10 @@ if (-not (Test-Path -LiteralPath $sourceExecutable)) {
 }
 
 Get-Process -Name 'AudioKeepAlive' -ErrorAction SilentlyContinue |
-    Where-Object { $_.Path -eq $installedExecutable } |
+    Where-Object {
+        $_.Path -eq $installedExecutable -or
+        $_.Path -eq (Join-Path $legacyInstallDirectory 'AudioKeepAlive.exe')
+    } |
     Stop-Process -Force
 Remove-ItemProperty -Path $runKey -Name $runValueName -ErrorAction SilentlyContinue
 
@@ -35,22 +37,20 @@ if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
 
 New-Item -ItemType Directory -Path $installDirectory -Force | Out-Null
 Copy-Item -LiteralPath $sourceExecutable -Destination $installedExecutable -Force
-Copy-Item -LiteralPath $sourceLauncher -Destination $installedLauncher -Force
-Remove-Item -LiteralPath (Join-Path $installDirectory 'AudioKeepAlive.dll') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $installDirectory 'AudioKeepAlive.cs') -Force -ErrorAction SilentlyContinue
+if (Test-Path -LiteralPath $legacyInstallDirectory) {
+    Remove-Item -LiteralPath $legacyInstallDirectory -Recurse -Force
+}
 
-$wscript = Join-Path $env:WINDIR 'System32\wscript.exe'
-$taskArguments = '//B //NoLogo "{0}"' -f $installedLauncher
 $startBoundary = (Get-Date).AddSeconds(10).ToString("yyyy-MM-dd'T'HH:mm:sszzz")
 $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-$escapedCommand = [Security.SecurityElement]::Escape($wscript)
-$escapedArguments = [Security.SecurityElement]::Escape($taskArguments)
+$escapedCommand = [Security.SecurityElement]::Escape($installedExecutable)
 
 $taskXml = @"
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>Plays a short silent audio pulse periodically to keep the active audio device awake.</Description>
+    <Description>Plays a very quiet audio pulse periodically to keep the active audio device awake.</Description>
   </RegistrationInfo>
   <Triggers>
     <TimeTrigger>
@@ -81,7 +81,7 @@ $taskXml = @"
     <Hidden>true</Hidden>
     <RunOnlyIfIdle>false</RunOnlyIfIdle>
     <WakeToRun>false</WakeToRun>
-    <ExecutionTimeLimit>PT1M</ExecutionTimeLimit>
+    <ExecutionTimeLimit>PT30S</ExecutionTimeLimit>
     <Priority>7</Priority>
     <RestartOnFailure>
       <Interval>PT1M</Interval>
@@ -91,7 +91,6 @@ $taskXml = @"
   <Actions Context="Author">
     <Exec>
       <Command>$escapedCommand</Command>
-      <Arguments>$escapedArguments</Arguments>
     </Exec>
   </Actions>
 </Task>
